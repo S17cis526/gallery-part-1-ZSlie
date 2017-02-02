@@ -8,12 +8,53 @@
 
 var http = require('http'); /* loads the http library; JS strings don't care about ' or " */
 var fs = require('fs');
-var port = 3000;
+var port = 3007;
 //var chess = fs.readFileSync('images/chess.jpg'); /* these options cashe -- but we don't usually want to do this */
 //var chess = fs.readFileSync('images/fern.jpg');
 var stylesheet = fs.readFileSync('gallery.css'); //Caches the file
 
 var imageNames = ['ace.jpg', 'bubble.jpg', 'chess.jpg', 'mobile.jpg', 'fern.jpg'];
+
+function getImageNames(callback) { //The callback function is used due to asynchronous operations.
+	fs.readdir('images/', function(err, fileNames) {
+			if (err) callback(err, undefined);
+			else callback(false, fileNames); //False because there is no error. Afterwards, send fileNames in fileNames array.
+	});
+}
+
+function imageNamesToTags(fileNames) {
+	return fileNames.map(function(fileName) {
+		return `<img src="${fileName}" alt="${fileName}">`;
+	});
+}
+
+function buildGallery(imageTags) {
+	var html = '<!doctype html>';
+			html += '<head>';
+			html += ' <title>Gallery</title>';
+			html += ' <link href="gallery.css" rel="stylesheet" type="text/css">';
+			html += '</head>';
+			html += '<body>';
+			html += ' <h1>Gallery</h1>';
+			html += imageNamesToTags(imageTags).join('');
+			html += ' <h1>Hello.</h1> Time is ' + Date.now();
+			html += '</body>';
+		return html;
+}
+
+function serveGallery(req, res){
+	getImageNames(function(err, imageNames){
+		if (err) {
+			console.error(err);
+			res.statusCode = 500;
+			res.statusMessage = 'Server error';
+			res.end();
+			return;
+		}
+		res.setHeader('Content-Type', 'text/html');
+		res.end(buildGallery(imageNames));
+	});
+}
 
 function serveImage(filename, req, res)
 {
@@ -26,8 +67,11 @@ function serveImage(filename, req, res)
 			res.end("Silly me");
 			return;
 		}
-		res.setHeader("Content-Type", "images/jpeg"); /* lets the server know what type of content to expect */
-		res.end(body);
+		else {
+			var img = fs.readFileSync('images/' + filename);
+			res.setHeader("Content-Type", "image/jpeg"); /* lets the server know what type of content to expect */
+			res.end(img);
+		}
 	});
 }
 
@@ -35,58 +79,16 @@ var server = http.createServer(function (req, res) {
 
 	switch (req.url)
 	{
+		case '/':
     case '/gallery':
-      var gHtml = imageNames.map(function(fileName){
-        return '<img src="' + fileName + '" alt="a fishing ace at work">';
-      }).join('');
-      var html = '<!doctype html>';
-          html += '<head>';
-          html += ' <title>Gallery</title>';
-          html += ' <link href="gallery.css" rel="stylesheet" type="text/css">';
-          html += '</head>';
-          html += '<body>';
-          html += ' <h1>Gallery</h1>'
-          html += gHtml
-          html += ' <h1>Hello.</h1> Time is " + Date.now()';
-          html += '</body>';
-      res.setHeader('Content-Type', 'text/html');
-      res.end(html);
+			serveGallery(req, res);
       break;
-    case '/ace':
-    case '/ace.jpg':
-    case '/ace.jpeg':
-      serveImage('ace.jpg', req, res);
-      break;
-    case '/mobile':
-    case '/mobile.jpg':
-    case '/mobile.jpeg':
-      serveImage('mobile.jpg', req, res);
-      break;
-    case '/bubble':
-    case '/bubble.jpg':
-    case '/bubble.jpeg':
-      serveImage('bubble.jpg', req, res);
-      break;
-    case '/chess.jpg':
-		case '/chess':
-    case '/chess.jpeg':
-			serveImage('chess.jpg', req, res);
-			break;
-		case '/fern':
-		case '/fern/':
-		case '/fern.jpg':
-		case '/fern.jpeg':
-			serveImage('fern.jpg', req, res);
-			break;
     case '/gallery.css':
       res.setHeader('Content-Type', 'text/css');
       res.end(stylesheet);
       break;
 		default:
-			res.statusCode = 404;
-			res.statusMessage = "Not Found";
-			res.end("NO");
-      break;
+			serveImage(req.url, req, res);
 	}
 }); /* createServer Takes function to handle requests */
 
