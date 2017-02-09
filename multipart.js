@@ -18,6 +18,25 @@ const DOUBLE_CRLF = Buffer.from([0x0D,0x0A,0x0D,0x0A]);
  * Otherwise, we invoke next with the request and response.
  */
 function multipart(req, res, next){
+  var chunks = [];
+  req.on('error', function(){
+    console.error(err);
+    res.statusCode = 500;
+    res.end();
+  });
+
+  req.on('data', function(chunk){
+    chunks.push(chunk);
+  });
+
+  req.on('end', function(){
+    //TODO: var boundary = req.headers["ContentType"];
+    var buffer = Buffer.concat(chunks);
+    req.body = processBody(buffer, boundary);
+    next(req, res);
+
+  });
+
 
 }
 
