@@ -1,154 +1,185 @@
-"use strict";
-
 /**
  * server.js
  * This file defines the server for a
  * simple photo gallery web app.
  */
+"use strict;"
 
-var http = require('http'); /* loads the http library; JS strings don't care about ' or " */
+/* global variables */
+var multipart = require('./multipart');
+var http = require('http');
 var url = require('url');
 var fs = require('fs');
-var port = 3007;
-var title = 'Gallery';
+var port = 3000;
 
-//Reads in our config file to be used later.
+/* load cached files */
 var config = JSON.parse(fs.readFileSync('config.json'));
+var stylesheet = fs.readFileSync('gallery.css');
 
-
-
-//var chess = fs.readFileSync('images/chess.jpg'); /* these options cashe -- but we don't usually want to do this */
-//var chess = fs.readFileSync('images/fern.jpg');
-var stylesheet = fs.readFileSync('gallery.css'); //Caches the file
-
-
-var imageNames = ['ace.jpg', 'bubble.jpg', 'chess.jpg', 'mobile.jpg', 'fern.jpg'];
-
-function getImageNames(callback) { //The callback function is used due to asynchronous operations.
-	fs.readdir('images/', function(err, fileNames) {
-			if (err) callback(err, undefined);
-			else callback(false, fileNames); //False because there is no error. Afterwards, send fileNames in fileNames array.
-	});
+/** @function getImageNames
+ * Retrieves the filenames for all images in the
+ * /images directory and supplies them to the callback.
+ * @param {function} callback - function that takes an
+ * error and array of filenames as parameters
+ */
+function getImageNames(callback) {
+  fs.readdir('images/', function(err, fileNames){
+    if(err) callback(err, undefined);
+    else callback(false, fileNames);
+  });
 }
 
+/** @function imageNamesToTags
+ * Helper function that takes an array of image
+ * filenames, and returns an array of HTML img
+ * tags build using those names.
+ * @param {string[]} filenames - the image filenames
+ * @return {string[]} an array of HTML img tags
+ */
 function imageNamesToTags(fileNames) {
-	return fileNames.map(function(fileName) {
-		return `<img src="${fileName}" alt="${fileName}">`;
-	});
+  return fileNames.map(function(fileName) {
+    return `<img src="${fileName}" alt="${fileName}">`;
+  });
 }
 
+/**
+ * @function buildGallery
+ * A helper function to build an HTML string
+ * of a gallery webpage.
+ * @param {string[]} imageTags - the HTML for the individual
+ * gallery images.
+ */
 function buildGallery(imageTags) {
-	var html = '<!doctype html>';
-			html += '<head>';
-			html += ' <title>' + config.title + '</title>';
-			html += ' <link href="gallery.css" rel="stylesheet" type="text/css">';
-			html += '</head>';
-			html += '<body>';
-			html += ' <h1>' + config.title + '</h1>';
-			html += '	<form>';
-			html += '	 <input type="text" name="title">';
-			html += '	 <input type="submit" value="Change Gallery Title">';
-			html += '	</form>';
-			html += imageNamesToTags(imageTags).join('');
-			html += '<form action="" method="POST" enctype="multipart/form-data">';
-			html += '  <input type="file" name="image">';
-			html += '  <input type="submit" value="Upload Image">';
-			html += '</form>';
-			html += ' <h1>Hello.</h1> Time is ' + Date.now();
-			html += '</body>';
-		return html;
+  var html =  '<!doctype html>';
+      html += '<head>';
+      html +=   '<title>' + config.title + '</title>';
+      html +=   '<link href="gallery.css" rel="stylesheet" type="text/css">'
+      html += '</head>';
+      html += '<body>';
+      html += '  <h1>' + config.title + '</h1>';
+      html += '  <form method="GET" action="">';
+      html += '    <input type="text" name="title">';
+      html += '    <input type="submit" value="Change Gallery Title">';
+      html += '  </form>';
+      html += imageNamesToTags(imageTags).join('');
+      html += ' <form action="" method="POST" enctype="multipart/form-data">';
+      html += '   <input type="file" name="image">';
+      html += '   <input type="submit" value="Upload Image">';
+      html += ' </form>';
+      html += '</body>';
+  return html;
 }
 
-function serveGallery(req, res){
-	getImageNames(function(err, imageNames){
-		if (err) {
-			console.error(err);
-			res.statusCode = 500;
-			res.statusMessage = 'Server error';
-			res.end();
-			return;
-		}
-		res.setHeader('Content-Type', 'text/html');
-		res.end(buildGallery(imageNames));
-	});
+/** @function serveGallery
+ * A function to serve a HTML page representing a
+ * gallery of images.
+ * @param {http.incomingRequest} req - the request object
+ * @param {http.serverResponse} res - the response object
+ */
+function serveGallery(req, res) {
+  getImageNames(function(err, imageNames){
+    if(err) {
+      console.error(err);
+      res.statusCode = 500;
+      res.statusMessage = 'Server error';
+      res.end();
+      return;
+    }
+    res.setHeader('Content-Type', 'text/html');
+    res.end(buildGallery(imageNames));
+  });
 }
 
-function serveImage(filename, req, res)
-{
-	fs.readFile('images/' + filename, function(err, body) {
-		if (err) {
-			console.error(err);
-			res.statusCode = 500;
-			res.statusMessage = "whoops";
-			res.end("Silly me");
-			return;
-		}
-		else {
-			var img = fs.readFileSync('images/' + filename);
-			res.setHeader("Content-Type", "image/jpeg"); /* lets the server know what type of content to expect */
-			res.end(img);
-		}
-	});
+/** @function serveImage
+ * A function to serve an image file.
+ * @param {string} filename - the filename of the image
+ * to serve.
+ * @param {http.incomingRequest} - the request object
+ * @param {http.serverResponse} - the response object
+ */
+function serveImage(fileName, req, res) {
+  fs.readFile('images/' + decodeURIComponent(fileName), function(err, data){
+    if(err) {
+      console.error(err);
+      res.statusCode = 404;
+      res.statusMessage = "Resource not found";
+      res.end();
+      return;
+    }
+    res.setHeader('Content-Type', 'image/*');
+    res.end(data);
+  });
 }
 
-function uploadPicture(req,res) {
-	var body = '';
-	req.on('error', function(){
-		res.statusCode = 500;
-		res.end();
-	});
-	// for the data we need to cache the data in some buffer - body is our buffer in this case.
-	req.on('data', function(data){
-		body += data;
-	});
-	// we have now received the entire file.
-	req.on('end', function() {
-		fs.writeFile('filename', body, function(){
-			if (err){
-				console.error(err);
-				res.statusCode = 500;
-				res.end();
-				return;
-			}
-			serveGallery(req, res);
-		});
-	});
+/** @function uploadImage
+ * A function to process an http POST request
+ * containing an image to add to the gallery.
+ * @param {http.incomingRequest} req - the request object
+ * @param {http.serverResponse} res - the response object
+ */
+function uploadImage(req, res) {
+  multipart(req, res, function(req, res) {
+    // make sure an image was uploaded
+    console.log('filename', req.body.filename)
+    if(!req.body.image.filename) {
+      console.error("No file in upload");
+      res.statusCode = 400;
+      res.statusMessage = "No file specified"
+      res.end("No file specified");
+      return;
+    }
+    fs.writeFile('images/' + req.body.image.filename, req.body.image.data, function(err){
+      if(err) {
+        console.error(err);
+        res.statusCode = 500;
+        res.statusMessage = "Server Error";
+        res.end("Server Error");
+        return;
+      }
+      serveGallery(req, res);
+    });
+  });
 }
 
-var server = http.createServer(function (req, res) {
-	var urlParts = url.parse(req.url); //href, search, query, path
-	/*
-	var url = req.url.split('?'); //At most we should have two parts: a resource and a querystring - separated by '?'
-	var resource = url[0];
-	var queryString = url[1];
-	*/
-	if (urlParts.query) { //Checks if queryString is defined
-		var matches = /title=(.+)($|&)/.exec(urlParts.query) // \\ Defines a regex. () is what is inside of it. [] is what is at the end
-		if (matches && matches[1]){
-			config.title = decodeURIComponent(matches[1]);
-			fs.writeFile('config.json', JSON.stringify(config));
-		}
-	}
+/** @function handleRequest
+ * A function to determine what to do with
+ * incoming http requests.
+ * @param {http.incomingRequest} req - the incoming request object
+ * @param {http.serverResponse} res - the response object
+ */
+function handleRequest(req, res) {
+  // at most, the url should have two parts -
+  // a resource and a querystring separated by a ?
+  var urlParts = url.parse(req.url);
 
-	switch (urlParts.pathname)
-	{
-		case '/':
+  if(urlParts.query){
+    var matches = /title=(.+)($|&)/.exec(urlParts.query);
+    if(matches && matches[1]){
+      config.title = decodeURIComponent(matches[1]);
+      fs.writeFile('config.json', JSON.stringify(config));
+    }
+  }
+
+  switch(urlParts.pathname) {
+    case '/':
     case '/gallery':
-			if (req.method == 'GET'){
-				serveGallery(req,res);
-			} else if (req.method == 'POST'){
-				uploadPicture(req,res);
-			}
+      if(req.method == 'GET') {
+        serveGallery(req, res);
+      } else if(req.method == 'POST') {
+        uploadImage(req, res);
+      }
       break;
     case '/gallery.css':
       res.setHeader('Content-Type', 'text/css');
       res.end(stylesheet);
       break;
-		default:
-			serveImage(req.url, req, res);
-	}
-}); /* createServer Takes function to handle requests */
+    default:
+      serveImage(req.url, req, res);
+  }
+}
 
-server.listen(port, function() {
-	console.log("Listening on Port " + port);
+/* Create and launch the webserver */
+var server = http.createServer(handleRequest);
+server.listen(port, function(){
+  console.log("Server is listening on port ", port);
 });
