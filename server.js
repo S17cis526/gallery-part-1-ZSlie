@@ -10,7 +10,7 @@ var multipart = require('./multipart');
 var http = require('http');
 var url = require('url');
 var fs = require('fs');
-var port = 3000;
+var port = 3007;
 
 /* load cached files */
 var config = JSON.parse(fs.readFileSync('config.json'));
